@@ -4,7 +4,10 @@ var User = require('./user');
 
 var systemSchema = mongoose.Schema({
   name: String,
-  shortName: String,
+  shortName: {
+	  type: String,
+	  match: [/^\w+$/, 'shortName must be a URL slug']
+  }
   systemType: String,
   county: String,
   country: String,

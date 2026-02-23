@@ -85,6 +85,16 @@ exports.upload = async function (req, res, next) {
         }
 
         const shortName = req.params.shortName.toLowerCase();
+        if(!/^\w+$/.test(shortName)) {
+          console.warn(`[${req.params.shortName}] Error illegal chracters in system shortName`);
+          span.setStatus({
+            code: opentelemetry.SpanStatusCode.ERROR,
+            message: "Invalid system shortName",
+          });
+          res.status(500).send("Error, invalid system shortName:\n");
+          return;
+        }
+
         const apiKey = req.body.api_key;
         const talkgroupNum = parseInt(req.body.talkgroup_num);
         const freq = parseFloat(req.body.freq);
