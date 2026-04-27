@@ -20,6 +20,72 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
 import { is } from "date-fns/locale";
 import "./MediaPlayer.css";
 
+/** SubRip timestamps use a comma before milliseconds. */
+function parseSrtTimestampToMs(ts) {
+  const m = String(ts).trim().match(/^(\d+):([0-5]\d):([0-5]\d),(\d{3})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mm = Number(m[2]);
+  const s = Number(m[3]);
+  const ms = Number(m[4]);
+  return ((h * 3600 + mm * 60 + s) * 1000) + ms;
+}
+
+function parseSrt(srtText) {
+  const lines = String(srtText ?? '').replace(/\r\n/g, '\n').split('\n');
+  const cues = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    while (i < lines.length && lines[i].trim() === '') i++;
+    if (i >= lines.length) break;
+    if (/^\d+$/.test(lines[i].trim())) {
+      i++;
+    }
+    while (i < lines.length && lines[i].trim() === '') i++;
+    if (i >= lines.length) break;
+
+    const timingLine = lines[i] || '';
+    const tm = timingLine.match(
+      /^(\d+:\d{2}:\d{2},\d{3})\s*-->\s*(\d+:\d{2}:\d{2},\d{3})/
+    );
+    if (!tm) {
+      i++;
+      continue;
+    }
+
+    const startMs = parseSrtTimestampToMs(tm[1]);
+    const endMs = parseSrtTimestampToMs(tm[2]);
+    i++;
+
+    const textLines = [];
+    while (i < lines.length && lines[i].trim() !== '') {
+      textLines.push(lines[i]);
+      i++;
+    }
+
+    const text = textLines.join('\n').trim();
+    if (startMs != null && endMs != null && endMs > startMs && text) {
+      cues.push({ startMs, endMs, text });
+    }
+  }
+
+  return cues;
+}
+
+function inferShortName(propsShortName, call) {
+  if (propsShortName) return String(propsShortName).toLowerCase();
+  if (call?.shortName) return String(call.shortName).toLowerCase();
+  const url = String(call?.url ?? '');
+  const idx = url.indexOf('/media/');
+  if (idx >= 0) {
+    const rest = url.slice(idx + '/media/'.length);
+    const parts = rest.split('/').filter(Boolean);
+    if (parts.length > 0) return String(parts[0]).toLowerCase();
+  }
+  return '';
+}
+
 
 
 
@@ -31,6 +97,9 @@ const MediaPlayer = (props) => {
   const [wavesurfer, setWavesurfer] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playTime, setPlayTime] = useState(0);
+  const [subtitleCues, setSubtitleCues] = useState([]);
+  const [subtitleIdx, setSubtitleIdx] = useState(0);
+  const [currentSubtitle, setCurrentSubtitle] = useState("");
   const playSilence = props.playSilence;
   const parentHandlePlayPause = props.onPlayPause
   const regionsPlugin = useMemo(() => RegionsPlugin.create(), []);
@@ -73,6 +142,43 @@ const MediaPlayer = (props) => {
   useEffect(() => {
     setSourceIndex(0);
   }, [call]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setSubtitleCues([]);
+    setSubtitleIdx(0);
+    setCurrentSubtitle("");
+
+    if (!call || typeof call !== "object" || !call.url) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const directUrl = `${call.url}.srt`;
+
+    fetch(directUrl)
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return await r.text();
+      })
+      .then((text) => {
+        if (cancelled) return;
+        if (!text) return;
+        const cues = parseSrt(text);
+        setSubtitleCues(cues);
+        setSubtitleIdx(0);
+        setCurrentSubtitle("");
+      })
+      .catch(() => {
+        // No subtitles yet, or request failed.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [call, props.shortName]);
 
   useEffect(() => {
     if (wavesurfer) {
@@ -131,6 +237,23 @@ const MediaPlayer = (props) => {
       }
 
       setPlayTime(Math.floor(currentTime));
+
+      if (subtitleCues.length > 0) {
+        const nowMs = Math.floor(currentTime * 1000);
+        let idx = subtitleIdx;
+        if (idx >= subtitleCues.length) idx = subtitleCues.length - 1;
+        if (idx < 0) idx = 0;
+
+        while (idx + 1 < subtitleCues.length && nowMs >= subtitleCues[idx].endMs) idx++;
+        while (idx > 0 && nowMs < subtitleCues[idx].startMs) idx--;
+
+        const cue = subtitleCues[idx];
+        const text = cue && nowMs >= cue.startMs && nowMs <= cue.endMs ? cue.text : "";
+        if (idx !== subtitleIdx) setSubtitleIdx(idx);
+        if (text !== currentSubtitle) setCurrentSubtitle(text);
+      } else {
+        if (currentSubtitle) setCurrentSubtitle("");
+      }
     }
   }
 
@@ -145,9 +268,8 @@ const MediaPlayer = (props) => {
   }
 
   return (
-
-
-    <div className="mediaplayer-container">
+    <>
+      <div className="mediaplayer-container">
 
       <div className="icon-button-item desktop-only" >
         <Popup trigger={<Icon name='volume off' />} hoverable position='top center'>
@@ -206,7 +328,13 @@ const MediaPlayer = (props) => {
         </LabelGroup>
 
       </div>
-    </div>
+      </div>
+      {call && (
+        <div className="mediaplayer-subtitle">
+          {currentSubtitle}
+        </div>
+      )}
+    </>
   )
   /*
     const audioRef = React.createRef();

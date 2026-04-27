@@ -39,6 +39,16 @@
     font-weight: bold;
     text-align: center;
   }
+
+  .mediaplayer-subtitle {
+    padding: 4px 12px 8px 12px;
+    color: white;
+    text-align: center;
+    font-weight: 600;
+    line-height: 1.2;
+    min-height: 1.2em;
+    white-space: pre-line;
+  }
   .link-item {
     display: flex;
   justify-content: center;

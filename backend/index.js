@@ -80,6 +80,11 @@ mongoose.connection.on("error", console.error)
 mongoose.connection.on("disconnected", connect)
 
 
+// One multer instance for both audio (`.m4a`) and `.srt` call-sidecar
+// uploads — `uploads.upload` dispatches on `path.extname` of the uploaded file
+// and the sidecar branch enforces its own size cap (`SRT_MAX_BYTES`)
+// in-handler. Disk storage is preserved for the audio path's existing
+// `fs.readFileSync` flow.
 var upload = multer({
   dest: config.uploadDirectory
 });
@@ -126,7 +131,10 @@ app.get('/:shortName/calls/:time/older', calls.get_iphone_calls);
 app.get('/:shortName/calls', calls.get_calls); 
 
 
-/*------    UPLOADS   ---------- upload.single('call'),  uploads.upload,*/
+/*------    UPLOADS   ----------*/
+// Single endpoint for audio (`.m4a`) and call sidecars (`.srt`).
+// The controller dispatches on the uploaded file's extension and
+// only invokes `next()` (→ `notify_clients`) for the audio branch.
 app.post('/:shortName/upload', upload.single('call'), uploads.upload, async function (req, res) {
   notify_clients(req.call);
 });

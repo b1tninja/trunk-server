@@ -211,7 +211,7 @@ function CallPlayer(props) {
         <div className="item-container">
           <div className={autoplayClassName} onClick={() => handleAutoPlay(autoPlay)}><Icon name="level up" /><span className="desktop-only">Autoplay</span></div>
           <div className="mediaplayer">
-            <MediaPlayer call={currentCall} playSilence={silenceCount} onEnded={callEnded} onPlayPause={handlePlayPause} />
+            <MediaPlayer shortName={shortName} call={currentCall} playSilence={silenceCount} onEnded={callEnded} onPlayPause={handlePlayPause} />
           </div>
           <div className="link-item desktop-only" >
             <a href={callDownload}><Icon name="download" />Download</a>
